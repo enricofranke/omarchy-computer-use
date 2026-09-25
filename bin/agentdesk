@@ -25,13 +25,15 @@ def cmd_status(args, desk):
         info = {"running": bool(state)}
         if state:
             width, height = desk.screen_size(state)
-            info.update(state, width=width, height=height, visible=desk.visible(state))
+            info.update(state, width=width, height=height, visible=desk.visible(state),
+                        controller=desk.controller())
         print(json.dumps(info))
     elif not state:
         print("stopped")
     else:
         width, height = desk.screen_size(state)
-        print(f"running {width}x{height}, {'visible' if desk.visible(state) else 'hidden'}")
+        print(f"running {width}x{height}, {'visible' if desk.visible(state) else 'hidden'}, "
+              f"{desk.controller()} in control")
 
 
 def cmd_doctor(args, desk):
@@ -72,6 +74,9 @@ def main():
     sub.add_parser("show", help="bring the sandbox window onto your screen (starts it if needed)")
     sub.add_parser("hide", help="park the sandbox window off-screen; it keeps running")
     sub.add_parser("toggle", help="show or hide the sandbox window (starts it if needed)")
+    sub.add_parser("takeover", help="take control of the desktop with your own mouse and keyboard")
+    sub.add_parser("release", help="hand control of the desktop back to the agent")
+    sub.add_parser("control", help="toggle between takeover and release")
     p = sub.add_parser("status", help="print whether the sandbox runs")
     p.add_argument("--json", action="store_true")
     sub.add_parser("mcp", help="run the MCP server on stdio")
@@ -139,6 +144,17 @@ def main():
                 desk.toggle()
             else:
                 desk.start(show=True)
+        elif args.cmd == "takeover":
+            desk.start()
+            desk.give_to_user()
+        elif args.cmd == "release":
+            desk.give_to_agent()
+        elif args.cmd == "control":
+            if desk.controller() == "agent":
+                desk.start()
+                desk.give_to_user()
+            else:
+                desk.give_to_agent()
         elif args.cmd == "status":
             cmd_status(args, desk)
         elif args.cmd == "cursor-preview":

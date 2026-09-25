@@ -11,13 +11,15 @@ from pathlib import Path
 
 from . import config as settings
 from .desk import Desk, DeskError
-from .hypr import lua_str, lua_table
+from .hypr import HyprError, lua_str, lua_table
 from .wayland import AXIS_HORIZONTAL, AXIS_VERTICAL, BUTTONS, VirtualPointer, WaylandError
 
 MODIFIERS = {
     "ctrl": "ctrl", "control": "ctrl", "shift": "shift", "alt": "alt", "altgr": "altgr",
     "super": "logo", "meta": "logo", "cmd": "logo", "win": "logo", "logo": "logo",
 }
+
+HYPR_MODS = {"ctrl": "CTRL", "shift": "SHIFT", "alt": "ALT", "altgr": "MOD5", "logo": "SUPER"}
 
 KEY_ALIASES = {
     "enter": "Return", "return": "Return", "esc": "Escape", "escape": "Escape",
@@ -27,6 +29,8 @@ KEY_ALIASES = {
     "pagedown": "Page_Down", "page_down": "Page_Down", "insert": "Insert",
     "plus": "plus", "minus": "minus", "print": "Print",
 }
+
+TERMINALS = ("foot", "alacritty", "kitty", "ghostty", "wezterm", "xterm", "konsole", "terminal")
 
 CHROMIUM_FAMILY = ("chromium", "google-chrome-stable", "google-chrome", "brave", "brave-browser")
 
@@ -82,7 +86,15 @@ class Computer:
         self._pointer = None
         self._pointer_key = None
 
+    def require_control(self):
+        if self.desk.controller() == "user":
+            raise DeskError(
+                "the user has taken over the desktop. Wait, or ask them to hand control "
+                "back (bar icon right-click, 'r' in the preview, or `agentdesk release`)."
+            )
+
     def _with_pointer(self, action):
+        self.require_control()
         state = self.state()
         try:
             return action(self.pointer(state), state)
@@ -202,6 +214,7 @@ class Computer:
     def _wtype(self, args, stdin=None):
         if not shutil.which("wtype"):
             raise DeskError("wtype is not installed")
+        self.require_control()
         state = self.state()
         subprocess.run(
             ["wtype"] + args, env=self._env(state), input=stdin, text=True,
@@ -209,24 +222,67 @@ class Computer:
         )
 
     def type_text(self, text):
-        self._wtype(["-d", "4", "-"], stdin=text)
+        """Enter text through the sandbox's own clipboard; newlines press Return.
+
+        Keystroke typing via wtype maps characters onto keycodes of real keys
+        (the 14th distinct character lands on Backspace), and Chromium's
+        address bar and GTK dialogs act on those physical codes. Pasting is
+        immune to that and handles any Unicode. The clipboard is the sandbox's,
+        not the user's.
+        """
+        self.require_control()
+        if not shutil.which("wl-copy"):
+            self._wtype(["-d", "4", "-"], stdin=text)
+            return
+        state = self.state()
+        sandbox = self.desk.sandbox(state)
+        focused = (sandbox.json("activewindow") or {}).get("class", "").lower()
+        mods = "CTRL SHIFT" if any(t in focused for t in TERMINALS) else "CTRL"
+        for i, line in enumerate(text.split("\n")):
+            if i:
+                self.key("Return")
+            if not line:
+                continue
+            subprocess.run(
+                ["wl-copy"], input=line, text=True, env=self._env(state),
+                check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            time.sleep(0.05)
+            sandbox.dispatch("hl.dsp.send_shortcut(" + lua_table({"mods": mods, "key": "v"}) + ")")
+            time.sleep(0.08)
 
     def key(self, combos):
-        """xdotool-style combos, space separated: 'ctrl+l', 'ctrl+shift+t Return'."""
+        """xdotool-style combos, space separated: 'ctrl+l', 'ctrl+shift+t Return'.
+
+        Sent through the sandbox compositor's own keyboard (send_shortcut), which
+        uses the real keymap. wtype's per-call keymap swap makes GTK4 drop keys
+        such as Return, so it only serves as a fallback.
+        """
+        self.require_control()
+        state = self.state()
+        sandbox = self.desk.sandbox(state)
         for combo in combos.split():
             parts = [p for p in combo.split("+") if p]
             mods = [MODIFIERS[p.lower()] for p in parts if p.lower() in MODIFIERS]
             keys = [_keysym(p) for p in parts if p.lower() not in MODIFIERS]
-            args = []
-            for mod in mods:
-                args += ["-M", mod]
-            for key in keys:
-                args += ["-k", key]
-            for mod in reversed(mods):
-                args += ["-m", mod]
-            if not args:
+            if not keys and not mods:
                 raise DeskError(f"cannot parse key combo {combo!r}")
-            self._wtype(args)
+            try:
+                if len(keys) != 1:
+                    raise HyprError("not a single key")
+                key = keys[0].lower() if len(keys[0]) == 1 else keys[0]
+                sandbox.dispatch("hl.dsp.send_shortcut(" + lua_table({
+                    "mods": " ".join(HYPR_MODS[m] for m in mods), "key": key,
+                }) + ")")
+            except HyprError:
+                args = []
+                for mod in mods:
+                    args += ["-M", mod]
+                for key in keys:
+                    args += ["-k", key]
+                for mod in reversed(mods):
+                    args += ["-m", mod]
+                self._wtype(args)
             time.sleep(0.05)
 
     # --- apps & windows --------------------------------------------------------
@@ -240,6 +296,7 @@ class Computer:
         raise DeskError("no browser found; set \"browser\" in ~/.config/agentdesk/config.json")
 
     def launch(self, command):
+        self.require_control()
         state = self.state()
         command = self._isolate_browser(command)
         self.desk.sandbox(state).dispatch(f"hl.dsp.exec_cmd({lua_str(command)})")
@@ -310,6 +367,7 @@ class Computer:
         return matches[0]
 
     def window_action(self, action, query=None, x=None, y=None, width=None, height=None):
+        self.require_control()
         state = self.state()
         sandbox = self.desk.sandbox(state)
         win = self.find_window(query)

@@ -4,9 +4,11 @@ import Quickshell.Io
 import qs.Ui
 
 // Bar button for the agent's sandbox desktop.
-//   left click   show / hide the desktop (starts it when stopped)
-//   right click  stop it
-// The icon lights up in the accent colour while the agent is acting.
+//   left click    show / hide the desktop (starts it when stopped)
+//   right click   take over with your own mouse and keyboard / hand back
+//   middle click  stop it
+// The icon lights up in the accent colour while the agent is acting and turns
+// blue while you have taken over.
 BarWidget {
   id: root
   moduleName: "agentdesk"
@@ -19,6 +21,7 @@ BarWidget {
 
   property bool running: false
   property bool shown: false
+  property string controller: "agent"
   property real lastActivity: 0
   property real now: Date.now() / 1000
   property color accent: "#ff7a1a"
@@ -45,6 +48,7 @@ BarWidget {
         var status = JSON.parse(String(statusOut.text || "{}"))
         root.running = !!status.running
         root.shown = !!status.visible
+        root.controller = status.controller || "agent"
       } catch (e) {
         root.running = false
       }
@@ -110,14 +114,16 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: String.fromCodePoint(root.working ? 0xF0CFD : 0xF01C0)
-    active: root.running && (root.working || root.shown)
-    activeColor: root.accent
+    active: root.running && (root.working || root.shown || root.controller === "user")
+    activeColor: root.controller === "user" ? "#3d9bff" : root.accent
     dimmed: !root.running
     tooltipText: !root.running ? "Agent desktop stopped · click to start"
-      : root.working ? "Agent is working · click to " + (root.shown ? "hide" : "watch")
-      : "Agent desktop " + (root.shown ? "visible" : "hidden") + " · right-click to stop"
+      : root.controller === "user" ? "You control the agent desktop · right-click to hand back"
+      : root.working ? "Agent is working · click to " + (root.shown ? "hide" : "watch") + " · right-click to take over"
+      : "Agent desktop " + (root.shown ? "visible" : "hidden") + " · right-click to take over · middle-click to stop"
     onPressed: function(b) {
-      if (b === Qt.RightButton) root.run("stop")
+      if (b === Qt.RightButton) root.run("control")
+      else if (b === Qt.MiddleButton) root.run("stop")
       else root.run("toggle")
     }
 

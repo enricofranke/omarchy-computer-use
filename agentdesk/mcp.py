@@ -5,6 +5,8 @@ Stdlib only. stdout carries protocol messages exclusively; logs go to stderr.
 
 import base64
 import json
+import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -15,6 +17,15 @@ from .desk import DeskError
 from .hypr import HyprError
 from .wayland import WaylandError
 
+
+def notify(message):
+    """Desktop notification on the user's session; best effort."""
+    if shutil.which("notify-send"):
+        subprocess.run(
+            ["notify-send", "-a", "agentdesk", "-u", "critical", "Your turn on the agent desktop", message],
+            capture_output=True, timeout=5,
+        )
+
 INSTRUCTIONS = """\
 agentdesk gives you your own desktop: a separate Hyprland session with its own
 cursor and keyboard, shown to the user as a window with an orange frame. Your
@@ -24,7 +35,17 @@ are never touched, so they can keep working while you do.
 Workflow: take a screenshot first, act with the `computer` tool (coordinates
 are pixels in the latest screenshot), check the returned screenshot, repeat.
 Use `open` to start a browser or app inside the desktop and `windows` to list,
-focus, move, resize or maximize windows. The desktop starts on first use.
+focus, move, resize or maximize windows. The desktop starts on first use. The
+orange arrow with your name in screenshots is your own cursor.
+
+Dialogs (file pickers, save dialogs, password prompts of apps) open inside the
+desktop like any other window; handle them there. Files live on the user's real
+disk, so downloads land in ~/Downloads where your other tools can read them.
+
+When a step needs the human (logging in, entering a password or payment data,
+solving a CAPTCHA), call `desktop` with action `handover` and a short message.
+The user takes over with their own mouse and keyboard; your input is blocked
+until control comes back. Only use `reclaim` when the user said they are done.
 """
 
 COORD = {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}
@@ -104,13 +125,19 @@ TOOLS = [
     {
         "name": "desktop",
         "description": (
-            "Manage the sandbox desktop itself: status, start, stop, restart, or show/hide its "
-            "window on the user's screen. It keeps working while hidden."
+            "Manage the sandbox desktop itself: status, start, stop, restart, show/hide its window "
+            "on the user's screen (it keeps working while hidden), handover (ask the user to take "
+            "over, e.g. to log in; pass a message) and reclaim (take control back once the user "
+            "says they are done)."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["status", "start", "stop", "restart", "show", "hide"]},
+                "action": {
+                    "type": "string",
+                    "enum": ["status", "start", "stop", "restart", "show", "hide", "handover", "reclaim"],
+                },
+                "message": {"type": "string", "description": "What the user should do, for handover."},
             },
             "required": ["action"],
         },
@@ -236,7 +263,8 @@ class Server:
                 return [_text("The agent desktop is not running.")]
             width, height = desk.screen_size(state)
             where = "visible on the user's screen" if desk.visible(state) else "hidden (still running)"
-            return [_text(f"Running, {width}x{height}, {where}.")]
+            who = "you have control" if desk.controller() == "agent" else "the USER has control"
+            return [_text(f"Running, {width}x{height}, {where}, {who}.")]
         if action == "stop":
             self.computer.close()
             desk.stop()
@@ -253,6 +281,18 @@ class Server:
             desk.show()
         elif action == "hide":
             desk.hide()
+        elif action == "handover":
+            desk.start()
+            desk.give_to_user()
+            note = args.get("message") or "Claude needs you on its desktop."
+            notify(note)
+            return [_text(
+                "Handed control to the user and showed the desktop. Your input is blocked "
+                f"until they hand it back. They were told: {note}"
+            )]
+        elif action == "reclaim":
+            desk.give_to_agent()
+            return [_text("You have control of the desktop again."), _image(self.computer.screenshot())]
         else:
             raise DeskError(f"unknown desktop action {action!r}")
         return [_text(f"Done: {action}.")]
