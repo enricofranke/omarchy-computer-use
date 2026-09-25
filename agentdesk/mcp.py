@@ -127,15 +127,15 @@ TOOLS = [
         "description": (
             "Manage the sandbox desktop itself: status, start, stop, restart, show/hide its window "
             "on the user's screen (it keeps working while hidden), handover (ask the user to take "
-            "over, e.g. to log in; pass a message) and reclaim (take control back once the user "
-            "says they are done)."
+            "over, e.g. to log in; pass a message), reclaim (take control back once the user "
+            "says they are done) and preview (dock a live view next to the chat in Herdr)."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["status", "start", "stop", "restart", "show", "hide", "handover", "reclaim"],
+                    "enum": ["status", "start", "stop", "restart", "show", "hide", "handover", "reclaim", "preview"],
                 },
                 "message": {"type": "string", "description": "What the user should do, for handover."},
             },
@@ -274,8 +274,13 @@ class Server:
             desk.stop()
             desk.start()
             return [_text("Restarted the agent desktop.")]
+        if action == "preview":
+            pane = self.computer.open_preview()
+            return [_text(f"Preview docked in Herdr pane {pane}." if pane else
+                          "No preview: this session does not run inside Herdr (or preview is off).")]
         if action == "start":
             desk.start()
+            self.computer.open_preview()
         elif action == "show":
             desk.start(show=True)
             desk.show()

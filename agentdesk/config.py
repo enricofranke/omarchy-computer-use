@@ -23,6 +23,8 @@ DEFAULTS = {
     "screenshot_cursor": False,
     # Pause after an action before the follow-up screenshot, in milliseconds.
     "settle_ms": 400,
+    # Dock a live preview next to the agent's chat when it runs inside Herdr.
+    "preview": True,
 }
 
 

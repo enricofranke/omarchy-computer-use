@@ -18,7 +18,12 @@ the agent keeps working in the background.
   It keeps rendering while hidden.
 - **Its own apps.** Browsers get a separate profile and apps get their own D-Bus session,
   so nothing the agent opens lands on your desktop.
-- **No build step.** Plain Python stdlib plus tools Omarchy already ships (`grim`, `wtype`).
+- **Take over any time.** While the agent drives, your mouse and keyboard pass over its window
+  without touching anything. Take over with one click (the frame turns blue), hand back when done.
+  The agent can also hand over by itself, e.g. for a login.
+- **Live preview next to the chat.** Inside [Herdr](https://herdr.dev), a small pane docks next to
+  the agent's chat and shows what it sees.
+- **No build step.** Plain Python stdlib plus tools Omarchy already ships (`grim`, `wtype`, `wl-clipboard`).
 
 ## How it works
 
@@ -83,6 +88,33 @@ o.bind("SUPER + CTRL + A", "Agent desktop",
   "python3 ~/.config/omarchy/plugins/agentdesk/bin/agentdesk toggle")
 ```
 
+## Taking over
+
+| | |
+|---|---|
+| Bar icon | right click takes over / hands back |
+| Preview pane | `t` takes over / hands back, `s` shows or hides the window |
+| CLI | `agentdesk takeover`, `agentdesk release`, `agentdesk control` (toggle) |
+
+While the agent has control, the sandbox ignores your forwarded mouse and
+keyboard and its window does not take your keyboard focus. After a takeover
+the agent's input is blocked until you hand back.
+
+## Live preview
+
+`agentdesk watch` draws the desktop in any terminal: a sharp image in Kitty,
+Ghostty or WezTerm, coloured half blocks elsewhere. When the agent runs inside
+Herdr, the preview opens by itself in a split next to its chat the first time
+the desktop starts (`"preview": false` turns that off; `agentdesk preview`
+opens it by hand). For a sharp image inside Herdr, enable its experimental
+Kitty graphics:
+
+```toml
+# ~/.config/herdr/config.toml
+[experimental]
+kitty_graphics = true
+```
+
 ## MCP tools
 
 | Tool       | What it does |
@@ -90,7 +122,7 @@ o.bind("SUPER + CTRL + A", "Agent desktop",
 | `computer` | `screenshot`, `left_click`, `right_click`, `middle_click`, `double_click`, `triple_click`, `mouse_move`, `left_click_drag`, `left_mouse_down`/`up`, `scroll`, `type`, `key`, `cursor_position`, `wait`, `zoom`. The action set mirrors Anthropic's computer-use tool. Actions return a fresh screenshot. |
 | `open`     | Open a URL in the sandbox browser or launch any command inside the sandbox |
 | `windows`  | `list`, `focus`, `move`, `resize`, `maximize`, `center`, `fullscreen`, `close` |
-| `desktop`  | `status`, `start`, `stop`, `restart`, `show`, `hide` |
+| `desktop`  | `status`, `start`, `stop`, `restart`, `show`, `hide`, `handover`, `reclaim`, `preview` |
 
 The desktop starts on first use.
 
@@ -103,6 +135,7 @@ agentdesk open https://example.com  agentdesk open --cmd nautilus
 agentdesk screenshot -o shot.png    agentdesk click 640 400 [--button right] [--count 2]
 agentdesk type "hello"              agentdesk key ctrl+l
 agentdesk scroll 640 400 down 5     agentdesk windows [list|maximize|move|resize|…] [window]
+agentdesk takeover | release        agentdesk watch | preview
 agentdesk doctor                    agentdesk cursor-preview -o cursor.png
 ```
 
@@ -119,8 +152,8 @@ environment variable, e.g. `AGENTDESK_ACCENT=#7aa2f7`.
 | `start_hidden`      | `false`     | Park the window off-screen when the desktop starts |
 | `browser`           | auto        | Browser for `open` with a URL (Chromium family or Firefox) |
 | `isolate_dbus`      | `true`      | Give sandbox apps their own D-Bus session |
-| `screenshot_cursor` | `false`     | Draw the agent cursor into screenshots sent to the model |
 | `settle_ms`         | `400`       | Pause after an action before the follow-up screenshot |
+| `preview`           | `true`      | Dock the live preview next to the agent's chat in Herdr |
 
 Changes apply on the next `agentdesk restart`.
 

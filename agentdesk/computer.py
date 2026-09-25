@@ -62,6 +62,7 @@ class Computer:
         state = self.desk.state()
         if not state and autostart:
             state = self.desk.start()
+            self.open_preview()
         if not state:
             raise DeskError("the agent desktop is not running")
         return self.desk.require()
@@ -90,7 +91,7 @@ class Computer:
         if self.desk.controller() == "user":
             raise DeskError(
                 "the user has taken over the desktop. Wait, or ask them to hand control "
-                "back (bar icon right-click, 'r' in the preview, or `agentdesk release`)."
+                "back (bar icon right-click, 't' in the preview, or `agentdesk release`)."
             )
 
     def _with_pointer(self, action):
@@ -102,6 +103,12 @@ class Computer:
             # The sandbox may have restarted under us; reconnect once.
             self.close()
             return action(self.pointer(state), state)
+
+    def open_preview(self):
+        if self.cfg["preview"]:
+            from . import herdr
+            return herdr.open_preview()
+        return None
 
     def mark_activity(self, action):
         path = settings.runtime_dir() / "activity.json"
