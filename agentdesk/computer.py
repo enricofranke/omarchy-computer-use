@@ -30,8 +30,6 @@ KEY_ALIASES = {
     "plus": "plus", "minus": "minus", "print": "Print",
 }
 
-TERMINALS = ("foot", "alacritty", "kitty", "ghostty", "wezterm", "xterm", "konsole", "terminal")
-
 CHROMIUM_FAMILY = ("chromium", "google-chrome-stable", "google-chrome", "brave", "brave-browser")
 
 
@@ -57,12 +55,17 @@ class Computer:
         self._last_render_check = 0.0
         # True once this process started the desktop on demand.
         self.autostarted = False
+        # False when the agent's role may not start the desktop.
+        self.may_start = True
 
     # --- plumbing ----------------------------------------------------------
 
     def state(self, autostart=True):
         state = self.desk.state()
         if not state and autostart:
+            if not self.may_start:
+                raise DeskError("the agent desktop is not running and your role may not start it; "
+                                "ask the user to start it")
             # With a live preview docked next to the chat, the big window
             # would only get in the user's way; show it only without one.
             state = self.desk.start(show=False)
@@ -172,14 +175,15 @@ class Computer:
 
     def move(self, x, y, glide=True):
         def run(pointer, state):
-            if glide:
+            longest = self.cfg["cursor_glide_ms"] / 1000
+            if glide and longest > 0:
                 try:
                     sx, sy = self.cursor_position()
                 except (DeskError, KeyError, ValueError):
                     sx, sy = x, y
                 distance = math.hypot(x - sx, y - sy)
                 if distance > 3:
-                    duration = min(0.45, 0.12 + distance / 3000)
+                    duration = min(longest, 0.12 + distance / 3000)
                     steps = max(6, int(duration * 90))
                     for i in range(1, steps):
                         e = _ease(i / steps)
@@ -250,7 +254,8 @@ class Computer:
         state = self.state()
         sandbox = self.desk.sandbox(state)
         focused = (sandbox.json("activewindow") or {}).get("class", "").lower()
-        mods = "CTRL SHIFT" if any(t in focused for t in TERMINALS) else "CTRL"
+        terminal = any(t.lower() in focused for t in self.cfg["terminal_classes"] if t)
+        mods = "CTRL SHIFT" if terminal else "CTRL"
         for i, line in enumerate(text.split("\n")):
             if i:
                 self.key("Return")
@@ -316,7 +321,8 @@ class Computer:
         return command
 
     def open_url(self, url):
-        return self.launch(f"{shlex.quote(self.browser())} {shlex.quote(url)}")
+        argv = [self.browser(), *self.cfg["browser_args"], url]
+        return self.launch(" ".join(shlex.quote(a) for a in argv))
 
     def _isolate_browser(self, command):
         """Give browsers their own profile so they never attach to your running one."""

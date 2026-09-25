@@ -4,6 +4,7 @@ Stdlib only. stdout carries protocol messages exclusively; logs go to stderr.
 """
 
 import base64
+import copy
 import json
 import shutil
 import signal
@@ -15,6 +16,7 @@ import traceback
 
 from . import __version__
 from . import config as settings
+from . import roles
 from .computer import Computer
 from .desk import DeskError
 from .hypr import HyprError
@@ -31,7 +33,7 @@ def notify(message):
 
 INSTRUCTIONS = """\
 agentdesk gives you your own desktop: a separate Hyprland session with its own
-cursor and keyboard, shown to the user as a window with an orange frame. Your
+cursor and keyboard, shown to the user as a window with a coloured frame. Your
 clicks and typing only ever reach this desktop; the user's mouse and keyboard
 are never touched, so they can keep working while you do.
 
@@ -39,7 +41,7 @@ Workflow: take a screenshot first, act with the `computer` tool (coordinates
 are pixels in the latest screenshot), check the returned screenshot, repeat.
 Use `open` to start a browser or app inside the desktop and `windows` to list,
 focus, move, resize or maximize windows. The desktop starts on first use. The
-orange arrow with your name in screenshots is your own cursor.
+arrow with your name in screenshots is your own cursor.
 
 Dialogs (file pickers, save dialogs, password prompts of apps) open inside the
 desktop like any other window; handle them there. Files live on the user's real
@@ -167,9 +169,96 @@ def _xy(args, key="coordinate"):
 
 
 class Server:
-    def __init__(self):
+    def __init__(self, role=None):
         self.computer = Computer()
         self.lock = threading.Lock()
+        # `agentdesk mcp --role` wins over the agents table in the config.
+        self.role_override = role
+        self.client = ""
+        self.listed = None  # role signature the agent last saw in tools/list
+        self.outbox = []  # notifications to send after the current reply
+
+    def role(self):
+        return roles.role_for(settings.load(), self.client, self.role_override)
+
+    def remember_client(self, info):
+        """Keep a list of connected agents for `agentdesk agents`."""
+        self.client = str(info.get("name") or "")
+        try:
+            role = self.role().name
+        except (roles.Denied, RuntimeError) as exc:
+            role = f"invalid ({exc})"
+        path = settings.data_dir() / "agents.json"
+        try:
+            seen = json.loads(path.read_text()) if path.exists() else {}
+            seen[self.client or "(unnamed)"] = {
+                "version": str(info.get("version") or ""), "last_seen": time.time(), "role": role,
+            }
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(seen, indent=1))
+        except (OSError, ValueError):
+            pass
+
+    def tools(self, role):
+        """The tool list trimmed to what the role allows."""
+        allowed = []
+        for tool in TOOLS:
+            tool = copy.deepcopy(tool)
+            props = tool["inputSchema"]["properties"]
+            if tool["name"] == "open":
+                for key in ("url", "command"):
+                    if not role.allows_action("open", key):
+                        props.pop(key)
+                if not props:
+                    continue
+            else:
+                enum = [a for a in props["action"]["enum"] if role.allows_action(tool["name"], a)]
+                if not enum:
+                    continue
+                props["action"]["enum"] = enum
+            allowed.append(tool)
+        return allowed
+
+    def instructions(self):
+        try:
+            role = self.role()
+        except (roles.Denied, RuntimeError) as exc:
+            return INSTRUCTIONS + f"\nNo tool will work right now: {exc}\n"
+        if role.permissions == set(roles.PERMISSIONS) and role.urls is None and role.commands is None:
+            return INSTRUCTIONS
+        denied = [p for p in roles.PERMISSIONS if p not in role.permissions]
+        note = (
+            f"\nYour role on this desktop is {role.name!r}. You may: {role.summary()}. "
+            f"Not allowed: {', '.join(roles.PERMISSIONS[p] for p in denied) or 'nothing'}. "
+            "Tools and actions outside your role are not offered. If a task needs one, tell "
+            "the user instead of working around it.\n"
+        )
+        return INSTRUCTIONS + note
+
+    def guard(self, name, args):
+        """Refuse the call unless the agent's role allows it."""
+        # Settings and roles are read fresh, so changes apply to running sessions.
+        cfg = settings.load()
+        self.computer.cfg = self.computer.desk.cfg = cfg
+        role = roles.role_for(cfg, self.client, self.role_override)
+        signature = (role.name, tuple(roles.ordered(role.permissions)))
+        if self.listed is not None and signature != self.listed:
+            self.listed = signature
+            self.outbox.append({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        if name == "open":
+            action = "url" if args.get("url") else "command" if args.get("command") else None
+        else:
+            action = args.get("action", {"windows": "list", "desktop": "status"}.get(name))
+        if action:
+            role.check(name, action, args)
+        self.computer.may_start = role.allows("desktop.start")
+
+    def start_desk(self, show=None):
+        desk = self.computer.desk
+        if not desk.state() and not self.computer.may_start:
+            raise roles.Denied("the agent desktop is not running and your role may not start it; "
+                               "ask the user to start it")
+        return desk.start(show=show)
 
     def idle_watch(self):
         """Stop the desktop once the agent has left it alone for a while."""
@@ -279,7 +368,7 @@ class Server:
             command = c.launch(args["command"])
         else:
             raise DeskError("open needs url or command")
-        time.sleep(2.0)
+        time.sleep(c.cfg["open_wait_ms"] / 1000)
         return [_text(f"Launched: {command}"), _image(c.screenshot())]
 
     def tool_windows(self, args):
@@ -324,15 +413,16 @@ class Server:
             desk.start()
             self.computer.open_preview()
         elif action == "show":
-            desk.start(show=True)
+            self.start_desk(show=True)
             desk.show()
         elif action == "hide":
             desk.hide()
         elif action == "handover":
-            desk.start()
+            self.start_desk()
             desk.give_to_user()
-            note = args.get("message") or "Claude needs you on its desktop."
-            notify(note)
+            note = args.get("message") or f"{self.computer.cfg['label'] or 'The agent'} needs you on its desktop."
+            if self.computer.cfg["notify_handover"]:
+                notify(note)
             return [_text(
                 "Handed control to the user and showed the desktop. Your input is blocked "
                 f"until they hand it back. They were told: {note}"
@@ -350,24 +440,33 @@ class Server:
         method = message.get("method")
         params = message.get("params") or {}
         if method == "initialize":
+            self.remember_client(params.get("clientInfo") or {})
             return {
                 "protocolVersion": params.get("protocolVersion", "2025-06-18"),
-                "capabilities": {"tools": {}},
+                "capabilities": {"tools": {"listChanged": True}},
                 "serverInfo": {"name": "agentdesk", "version": __version__},
-                "instructions": INSTRUCTIONS,
+                "instructions": self.instructions(),
             }
         if method == "ping":
             return {}
         if method == "tools/list":
-            return {"tools": TOOLS}
+            try:
+                role = self.role()
+            except (roles.Denied, RuntimeError) as exc:
+                print(f"agentdesk: {exc}", file=sys.stderr)
+                return {"tools": []}
+            self.listed = (role.name, tuple(roles.ordered(role.permissions)))
+            return {"tools": self.tools(role)}
         if method == "tools/call":
             name = params.get("name", "")
             handler = getattr(self, "tool_" + name, None)
             if not handler:
                 return {"content": [_text(f"Unknown tool {name}")], "isError": True}
+            args = params.get("arguments") or {}
             try:
-                return {"content": handler(params.get("arguments") or {})}
-            except (DeskError, HyprError, WaylandError, ValueError, OSError) as exc:
+                self.guard(name, args)
+                return {"content": handler(args)}
+            except (DeskError, HyprError, WaylandError, roles.Denied, RuntimeError, ValueError, OSError) as exc:
                 return {"content": [_text(f"Error: {exc}")], "isError": True}
             except Exception as exc:  # keep the server alive on bugs
                 traceback.print_exc(file=sys.stderr)
@@ -375,8 +474,8 @@ class Server:
         raise KeyError(method)
 
 
-def serve():
-    server = Server()
+def serve(role=None):
+    server = Server(role)
     threading.Thread(target=server.idle_watch, daemon=True).start()
     signal.signal(signal.SIGTERM, lambda *_: (server.shutdown(), sys.exit(0)))
     for line in sys.stdin:
@@ -395,6 +494,9 @@ def serve():
                 reply["result"] = server.handle(message)
         except KeyError:
             reply["error"] = {"code": -32601, "message": f"Method not found: {message.get('method')}"}
+        for note in server.outbox:
+            sys.stdout.write(json.dumps(note) + "\n")
+        server.outbox.clear()
         sys.stdout.write(json.dumps(reply) + "\n")
         sys.stdout.flush()
     server.shutdown()

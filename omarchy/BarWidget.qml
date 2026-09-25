@@ -8,7 +8,7 @@ import qs.Ui
 //   right click   take over with your own mouse and keyboard / hand back
 //   middle click  stop it
 // The icon lights up in the accent colour while the agent is acting and turns
-// blue while you have taken over.
+// the takeover colour (blue by default) while you have taken over.
 BarWidget {
   id: root
   moduleName: "io.github.enricofranke.omarchy-computer-use"
@@ -25,6 +25,7 @@ BarWidget {
   property real lastActivity: 0
   property real now: Date.now() / 1000
   property color accent: "#ff7a1a"
+  property color takeoverAccent: "#3d9bff"
   readonly property bool working: running && now - lastActivity < 6
 
   implicitWidth: button.implicitWidth
@@ -81,8 +82,9 @@ BarWidget {
     onFileChanged: reload()
     onLoaded: {
       try {
-        var accent = JSON.parse(text()).accent
-        if (accent) root.accent = accent
+        var cfg = JSON.parse(text())
+        root.accent = cfg.accent || "#ff7a1a"
+        root.takeoverAccent = cfg.takeover_accent || "#3d9bff"
       } catch (e) {}
     }
   }
@@ -115,7 +117,7 @@ BarWidget {
     bar: root.bar
     text: String.fromCodePoint(root.working ? 0xF0CFD : 0xF01C0)
     active: root.running && (root.working || root.shown || root.controller === "user")
-    activeColor: root.controller === "user" ? "#3d9bff" : root.accent
+    activeColor: root.controller === "user" ? root.takeoverAccent : root.accent
     dimmed: !root.running
     tooltipText: !root.running ? "Agent desktop stopped · click to start"
       : root.controller === "user" ? "You control the agent desktop · right-click to hand back"

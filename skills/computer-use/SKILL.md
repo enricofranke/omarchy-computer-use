@@ -44,6 +44,9 @@ keyboard while you work. Nothing you do there reaches their desktop.
   tell you they are done.
 - Dialogs such as file pickers open inside your desktop; handle them there.
   Downloads land in the user's real ~/Downloads, where your file tools can read them.
+- The user decides with a role what you may do here. Actions outside it are not
+  offered or get refused. Then tell the user what you need; never work around a
+  refusal, e.g. by typing into a terminal or using the `agentdesk` command line.
 - Confirm with the user before irreversible actions (sending, buying, deleting,
   publishing), exactly as you would outside the sandbox.
 - The sandbox isolates input and display, not files: apps inside it run as the

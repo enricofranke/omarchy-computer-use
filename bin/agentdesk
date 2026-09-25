@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agentdesk import __version__, config, cursor  # noqa: E402
+from agentdesk import __version__, admin, config, cursor  # noqa: E402
 from agentdesk.computer import Computer  # noqa: E402
 from agentdesk.desk import Desk, DeskError  # noqa: E402
 from agentdesk.hypr import HyprError  # noqa: E402
@@ -79,7 +80,9 @@ def main():
     sub.add_parser("control", help="toggle between takeover and release")
     p = sub.add_parser("status", help="print whether the sandbox runs")
     p.add_argument("--json", action="store_true")
-    sub.add_parser("mcp", help="run the MCP server on stdio")
+    p = sub.add_parser("mcp", help="run the MCP server on stdio")
+    p.add_argument("--role", default=os.environ.get("AGENTDESK_ROLE"),
+                   help="role for this agent, overriding the agents table (env: AGENTDESK_ROLE)")
     p = sub.add_parser("watch", help="live preview of the desktop in this terminal")
     p.add_argument("--auto", action="store_true", help="close when the desktop stops")
     sub.add_parser("preview", help="open the live preview in a Herdr split next to this pane")
@@ -118,12 +121,15 @@ def main():
     p.add_argument("--height", type=int)
     p = sub.add_parser("cursor-preview", help="render the agent cursor to a PNG")
     p.add_argument("-o", "--output", default="agentdesk-cursor.png")
+    admin.add_parsers(sub)
 
     args = parser.parse_args()
 
+    if args.cmd in ("config", "role", "agents"):
+        return admin.run(args)
     if args.cmd == "mcp":
         from agentdesk.mcp import serve
-        serve()
+        serve(role=args.role)
         return 0
     if args.cmd == "watch":
         from agentdesk.watch import main as watch

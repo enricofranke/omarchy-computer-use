@@ -42,12 +42,15 @@ def open_preview():
     try:
         layout = _herdr("pane", "layout", "--pane", caller)["layout"]
         rect = next(p["rect"] for p in layout["panes"] if p["pane_id"] == caller)
+        cfg = settings.load()
+        direction = cfg["preview_split"]
         # Cells are about twice as tall as wide: split sideways only when the
         # pane is very wide, otherwise put the preview underneath.
-        direction = "right" if rect["width"] > 2.6 * rect["height"] else "down"
+        if direction == "auto":
+            direction = "right" if rect["width"] > 2.6 * rect["height"] else "down"
         pane = _herdr(
             "pane", "split", "--pane", caller, "--direction", direction,
-            "--ratio", "0.62", "--no-focus", "--cwd", str(Path.home()),
+            "--ratio", f"{cfg['preview_ratio']:g}", "--no-focus", "--cwd", str(Path.home()),
         )["pane"]
         command = f"exec {shlex.quote(sys.executable)} -B {shlex.quote(str(BIN))} watch --auto"
         _herdr("pane", "run", pane["pane_id"], command)
