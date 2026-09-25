@@ -262,6 +262,9 @@ class Computer:
             extra = [
                 f"--user-data-dir={profiles / name}", "--no-first-run",
                 "--no-default-browser-check", "--ozone-platform=wayland",
+                # The sandbox ends by closing its display, which Chromium
+                # counts as a crash; skip the restore prompt next time.
+                "--hide-crash-restore-bubble",
             ]
             return " ".join(shlex.quote(a) for a in argv[:1] + extra + argv[1:])
         if name == "firefox" and "--profile" not in argv and "-profile" not in argv:
@@ -323,14 +326,17 @@ class Computer:
             if x is None or y is None:
                 raise DeskError("move needs x and y")
             dsp("window.move", x=int(x), y=int(y))
+        # Hyprland resizes floating windows around their centre, so move them
+        # back afterwards to keep the top-left corner where the caller expects.
         elif action == "resize":
             if width is None or height is None:
                 raise DeskError("resize needs width and height")
             dsp("window.resize", x=int(width), y=int(height))
+            dsp("window.move", x=win["x"], y=win["y"])
         elif action == "maximize":
             screen_w, screen_h = self.desk.screen_size(state)
-            dsp("window.move", x=0, y=0)
             dsp("window.resize", x=screen_w, y=screen_h)
+            dsp("window.move", x=0, y=0)
         elif action == "center":
             dsp("window.center")
         elif action == "fullscreen":
