@@ -7,6 +7,9 @@ import shutil
 import sys
 from pathlib import Path
 
+# Never write .pyc files next to the code: the Omarchy shell watches the plugin
+# folder and would reload every bar widget for each new file.
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentdesk import __version__, config, cursor  # noqa: E402
