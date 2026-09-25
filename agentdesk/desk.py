@@ -293,8 +293,15 @@ class Desk:
     # --- who controls the desktop ------------------------------------------
 
     def controller(self):
-        """'agent' while the agent drives the desktop, 'user' after a takeover."""
-        return "agent" if self.lock_path.exists() else "user"
+        """'agent' while the agent drives the desktop, 'user' after a takeover.
+
+        A takeover needs a running desktop. Without one the agent is in control:
+        after a reboot the runtime dir is empty, and the next start creates the
+        lock file anyway.
+        """
+        if self.lock_path.exists() or not self.state_path.exists():
+            return "agent"
+        return "user"
 
     def give_to_user(self):
         """The user takes over: their mouse and keyboard work inside again."""

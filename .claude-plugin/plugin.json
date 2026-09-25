@@ -1,7 +1,7 @@
 {
   "name": "omarchy-computer-use",
   "displayName": "Omarchy Computer Use",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Computer use on Omarchy/Hyprland: Claude gets its own sandbox desktop with its own cursor, so your mouse and keyboard stay yours.",
   "author": {
     "name": "Enrico Franke",
