@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""agentdesk command line: run the sandbox desktop and drive it by hand."""
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from agentdesk import __version__, config, cursor  # noqa: E402
+from agentdesk.computer import Computer  # noqa: E402
+from agentdesk.desk import Desk, DeskError  # noqa: E402
+from agentdesk.hypr import HyprError  # noqa: E402
+from agentdesk.wayland import WaylandError  # noqa: E402
+
+
+def cmd_status(args, desk):
+    state = desk.state()
+    if args.json:
+        info = {"running": bool(state)}
+        if state:
+            width, height = desk.screen_size(state)
+            info.update(state, width=width, height=height, visible=desk.visible(state))
+        print(json.dumps(info))
+    elif not state:
+        print("stopped")
+    else:
+        width, height = desk.screen_size(state)
+        print(f"running {width}x{height}, {'visible' if desk.visible(state) else 'hidden'}")
+
+
+def cmd_doctor(args, desk):
+    ok = True
+    for tool, why in [
+        ("Hyprland", "runs the sandbox session"),
+        ("hyprctl", "talks to Hyprland"),
+        ("grim", "screenshots"),
+        ("wtype", "keyboard input"),
+        ("rsvg-convert", "custom cursor colours/labels (optional)"),
+        ("dbus-run-session", "isolates sandbox apps from your session bus (optional)"),
+    ]:
+        found = shutil.which(tool)
+        print(f"{'ok ' if found else 'MISSING'} {tool:18} {why}")
+        ok &= bool(found) or "optional" in why
+    try:
+        from agentdesk.hypr import Hypr, require_host
+        require_host()
+        Hypr().eval("return")
+        print("ok  Hyprland Lua API  (hyprctl eval works)")
+    except HyprError as exc:
+        ok = False
+        print(f"FAIL Hyprland Lua API: {exc}")
+    return 0 if ok else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="agentdesk", description=__doc__)
+    parser.add_argument("--version", action="version", version=__version__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("start", help="start the sandbox desktop")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--show", action="store_true", default=None)
+    g.add_argument("--hidden", action="store_false", dest="show")
+    sub.add_parser("stop", help="stop the sandbox desktop")
+    sub.add_parser("restart", help="restart the sandbox desktop")
+    sub.add_parser("show", help="bring the sandbox window onto your screen (starts it if needed)")
+    sub.add_parser("hide", help="park the sandbox window off-screen; it keeps running")
+    sub.add_parser("toggle", help="show or hide the sandbox window (starts it if needed)")
+    p = sub.add_parser("status", help="print whether the sandbox runs")
+    p.add_argument("--json", action="store_true")
+    sub.add_parser("mcp", help="run the MCP server on stdio")
+    sub.add_parser("doctor", help="check dependencies")
+
+    p = sub.add_parser("open", help="open a URL or launch a command in the sandbox")
+    p.add_argument("target", help="URL, or a command with --cmd")
+    p.add_argument("--cmd", action="store_true", dest="is_command", help="treat target as a shell command")
+    p = sub.add_parser("screenshot", help="save a screenshot of the sandbox")
+    p.add_argument("-o", "--output", default="agentdesk.png")
+    p.add_argument("--cursor", action="store_true", help="include the agent cursor")
+    p = sub.add_parser("click", help="click at X Y")
+    p.add_argument("x", type=int)
+    p.add_argument("y", type=int)
+    p.add_argument("--button", choices=["left", "right", "middle"], default="left")
+    p.add_argument("--count", type=int, default=1)
+    p = sub.add_parser("move", help="move the agent cursor to X Y")
+    p.add_argument("x", type=int)
+    p.add_argument("y", type=int)
+    p = sub.add_parser("type", help="type text")
+    p.add_argument("text")
+    p = sub.add_parser("key", help="press key combos, e.g. ctrl+l")
+    p.add_argument("combo")
+    p = sub.add_parser("scroll", help="scroll at X Y")
+    p.add_argument("x", type=int)
+    p.add_argument("y", type=int)
+    p.add_argument("direction", choices=["up", "down", "left", "right"])
+    p.add_argument("amount", type=int, nargs="?", default=3)
+    p = sub.add_parser("windows", help="list or arrange sandbox windows")
+    p.add_argument("action", nargs="?", default="list",
+                   choices=["list", "focus", "move", "resize", "maximize", "center", "fullscreen", "close"])
+    p.add_argument("window", nargs="?")
+    p.add_argument("--x", type=int)
+    p.add_argument("--y", type=int)
+    p.add_argument("--width", type=int)
+    p.add_argument("--height", type=int)
+    p = sub.add_parser("cursor-preview", help="render the agent cursor to a PNG")
+    p.add_argument("-o", "--output", default="agentdesk-cursor.png")
+
+    args = parser.parse_args()
+
+    if args.cmd == "mcp":
+        from agentdesk.mcp import serve
+        serve()
+        return 0
+
+    try:
+        desk = Desk()
+        if args.cmd == "doctor":
+            return cmd_doctor(args, desk)
+        if args.cmd == "start":
+            desk.start(show=args.show)
+        elif args.cmd == "stop":
+            print("stopped" if desk.stop() else "not running")
+        elif args.cmd == "restart":
+            desk.stop()
+            desk.start()
+        elif args.cmd == "show":
+            desk.start(show=True)
+            desk.show()
+        elif args.cmd == "hide":
+            desk.hide()
+        elif args.cmd == "toggle":
+            if desk.state():
+                desk.toggle()
+            else:
+                desk.start(show=True)
+        elif args.cmd == "status":
+            cmd_status(args, desk)
+        elif args.cmd == "cursor-preview":
+            cfg = desk.cfg
+            cursor.preview(cfg["accent"], cfg["label"], args.output)
+            print(args.output)
+        else:
+            computer = Computer(desk)
+            if args.cmd == "open":
+                print(computer.launch(args.target) if args.is_command else computer.open_url(args.target))
+            elif args.cmd == "screenshot":
+                Path(args.output).write_bytes(computer.screenshot(cursor=args.cursor))
+                print(args.output)
+            elif args.cmd == "click":
+                computer.click(args.x, args.y, args.button, args.count)
+            elif args.cmd == "move":
+                computer.move(args.x, args.y)
+            elif args.cmd == "type":
+                computer.type_text(args.text)
+            elif args.cmd == "key":
+                computer.key(args.combo)
+            elif args.cmd == "scroll":
+                computer.scroll(args.x, args.y, args.direction, args.amount)
+            elif args.cmd == "windows":
+                if args.action == "list":
+                    for w in computer.windows():
+                        mark = "*" if w["focused"] else " "
+                        print(f"{mark} {w['id']}  {w['x']},{w['y']} {w['width']}x{w['height']}  "
+                              f"{w['class']}: {w['title']}")
+                else:
+                    computer.window_action(args.action, args.window, args.x, args.y, args.width, args.height)
+            computer.close()
+    except (DeskError, HyprError, WaylandError, RuntimeError) as exc:
+        print(f"agentdesk: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

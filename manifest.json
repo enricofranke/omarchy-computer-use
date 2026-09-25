@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "agentdesk",
+  "name": "AgentDesk",
+  "version": "0.1.0",
+  "author": "agentdesk contributors",
+  "description": "Shows the AI agent's sandbox desktop: click to show or hide it, right-click to stop it",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "omarchy/BarWidget.qml" },
+  "barWidget": {
+    "displayName": "AgentDesk",
+    "description": "Show, hide or stop the AI agent's sandbox desktop",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

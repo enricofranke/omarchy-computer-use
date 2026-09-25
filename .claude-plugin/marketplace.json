@@ -1,0 +1,14 @@
+{
+  "name": "agentdesk",
+  "description": "Computer use for Hyprland and Omarchy with a separate agent cursor",
+  "owner": {
+    "name": "agentdesk contributors"
+  },
+  "plugins": [
+    {
+      "name": "agentdesk",
+      "source": "./",
+      "description": "Claude gets its own sandbox desktop with its own cursor on Hyprland/Omarchy"
+    }
+  ]
+}
