@@ -2,6 +2,11 @@
 
 **Claude computer use for Omarchy and Hyprland, with its own cursor.**
 
+<p align="center">
+  <img src="assets/demo-herdr.gif" alt="Claude Code in Herdr opens Wikipedia on its own desktop and searches for Hyprland, while the live preview next to the chat shows every step">
+  <br><sub>Claude Code in <a href="https://herdr.dev">Herdr</a> works on its own desktop while the live preview docks next to the chat. Real recording, sped up 1.6×.</sub>
+</p>
+
 Omarchy Computer Use gives Claude (or any MCP-capable agent) a desktop of its own: a
 nested Hyprland session that appears on your screen as a single window with an
 orange frame. The agent gets its own cursor (an orange arrow with its name
@@ -9,23 +14,32 @@ tag), its own keyboard focus and its own windows. Your mouse and keyboard are
 never touched, so you keep working while it clicks around. Hide the window and
 the agent keeps working in the background.
 
-<p align="center"><img src="assets/cursor-preview.png" width="240" alt="The agent cursor: an orange arrow with a Claude name tag"></p>
+## Highlights
 
-- **Your input stays yours.** The agent drives a separate Wayland seat, not your pointer.
+- **Your input stays yours.** The agent drives a separate Wayland seat with its own cursor,
+  not your pointer. You keep working while it clicks around.
+- **Live preview next to the chat.** Inside [Herdr](https://herdr.dev), a pane docks next to
+  the agent's chat the moment its desktop starts and shows every step, with buttons to take over,
+  show, stop or close. Any other terminal gets the same view with `agentdesk watch`.
+- **Take over any time.** One click and the frame turns blue: your mouse, keyboard and clipboard
+  work inside, the agent waits. Hand back when done. The agent can also hand over by itself,
+  e.g. for a login.
+- **Roles.** Decide per agent what it may do: only look, click and type, open URLs from an allowlist,
+  launch apps, stop the desktop. Every setting is configurable from the command line.
 - **Real computer use.** It clicks, drags, scrolls, types (including Unicode), presses shortcuts,
   and moves, resizes, maximizes and closes windows.
 - **Watch or ignore it.** Show the desktop over your current workspace, or park it off-screen.
   It keeps rendering while hidden.
 - **Its own apps.** Browsers get a separate profile and apps get their own D-Bus session,
   so nothing the agent opens lands on your desktop.
-- **Take over any time.** While the agent drives, your mouse and keyboard pass over its window
-  without touching anything. Take over with one click (the frame turns blue), hand back when done.
-  The agent can also hand over by itself, e.g. for a login.
-- **Roles.** Decide per agent what it may do: only look, click and type, open URLs from an allowlist,
-  launch apps, stop the desktop. Every setting is configurable from the command line.
-- **Live preview next to the chat.** Inside [Herdr](https://herdr.dev), a small pane docks next to
-  the agent's chat and shows what it sees.
 - **No build step.** Plain Python stdlib plus tools Omarchy already ships (`grim`, `wtype`, `wl-clipboard`).
+
+<p align="center">
+  <img src="assets/demo-desktop.gif" width="720" alt="The agent's own desktop: its cursor with a Claude name tag opens Wikipedia, searches for Hyprland and opens the article">
+  <br><sub>The same run, recorded straight from the agent's desktop.</sub>
+</p>
+
+<p align="center"><img src="assets/cursor-preview.png" width="200" alt="The agent cursor: an orange arrow with a Claude name tag"></p>
 
 ## How it works
 
@@ -84,6 +98,14 @@ desktop and starts it when it is stopped. Right click takes over or hands back,
 middle click stops it. The icon pulses in the accent colour while the agent is
 acting and turns blue while you have taken over.
 
+### Command line
+
+The `agentdesk` command comes with both installs. To have it on your `PATH`:
+
+```bash
+ln -s ~/.config/omarchy/plugins/io.github.enricofranke.omarchy-computer-use/bin/agentdesk ~/.local/bin/agentdesk
+```
+
 For a keybinding, add this to `~/.config/hypr/bindings.lua`:
 
 ```lua
@@ -91,7 +113,31 @@ o.bind("SUPER + CTRL + A", "Agent desktop",
   "python3 ~/.config/omarchy/plugins/io.github.enricofranke.omarchy-computer-use/bin/agentdesk toggle")
 ```
 
+## Uninstall
+
+```bash
+agentdesk stop
+claude plugin uninstall omarchy-computer-use@omarchy-computer-use
+claude plugin marketplace remove omarchy-computer-use
+omarchy plugin remove io.github.enricofranke.omarchy-computer-use --yes
+rm -f ~/.local/bin/agentdesk
+# Settings, the agent's browser profile and its cursor theme:
+rm -rf ~/.config/agentdesk ~/.local/share/agentdesk
+```
+
 ## Taking over
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/frame-agent.png" alt="The agent's desktop with an orange frame: the agent is in control"></td>
+    <td width="50%"><img src="assets/frame-takeover.png" alt="The same desktop with a blue frame: the user has taken over"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Orange frame: the agent drives, your mouse and keyboard pass over it.</sub></td>
+    <td align="center"><sub>Blue frame: you took over, the agent waits until you hand back.</sub></td>
+  </tr>
+</table>
+
 
 | | |
 |---|---|
@@ -122,7 +168,9 @@ works too.
 Ghostty or WezTerm, coloured half blocks elsewhere. When the agent runs inside
 Herdr, the preview opens by itself in a split next to its chat the first time
 the desktop starts (`"preview": false` turns that off; `agentdesk preview`
-opens it by hand). For a sharp image inside Herdr, enable its experimental
+opens it by hand). Its buttons, also as keys: **Take over** / **Hand back** (`t`),
+**Show** / **Hide** the window (`s`), **Stop** the desktop (`x`) and **Close**
+the preview (`q`). For a sharp image inside Herdr, enable its experimental
 Kitty graphics:
 
 ```toml
