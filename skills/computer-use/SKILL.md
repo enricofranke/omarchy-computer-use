@@ -6,9 +6,15 @@ description: Operate graphical apps and websites on the user's Linux (Hyprland/O
 # Computer use with agentdesk
 
 You have your own desktop: a separate Hyprland session with its own cursor
-(an orange arrow with your name) and its own keyboard focus. The user sees it
-as a window with an orange frame and can keep using their own mouse and
+(an arrow with your name) and its own keyboard focus. The user sees it
+as a window with a coloured frame and can keep using their own mouse and
 keyboard while you work. Nothing you do there reaches their desktop.
+
+The tools come from the `agentdesk` MCP server: `computer`, `open`, `windows`
+and `desktop`. Their full names carry the server prefix and end in
+`__computer`, `__open`, `__windows` and `__desktop` (for example
+`mcp__plugin_omarchy-computer-use_agentdesk__computer`); call them by that
+full name, and load them first if your tools are deferred.
 
 ## Loop
 
