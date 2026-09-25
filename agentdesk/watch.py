@@ -94,14 +94,21 @@ class HerdrRenderer:
 
     @classmethod
     def probe(cls):
+        """(renderer or None, why not) for the current Herdr pane."""
         if os.environ.get("HERDR_ENV") != "1" or not os.environ.get("HERDR_SOCKET_PATH"):
-            return None
+            return None, ""
         try:
             reply = cls.call("pane.graphics.info", {"pane_id": os.environ.get("HERDR_PANE_ID", "")})
         except (OSError, ValueError):
-            return None
-        result = reply.get("result")
-        return cls(result) if result else None
+            return None, ""
+        if reply.get("result"):
+            return cls(reply["result"]), ""
+        code = (reply.get("error") or {}).get("code", "")
+        if code == "feature_disabled":
+            return None, "sharp preview: set experimental.kitty_graphics = true in herdr"
+        if code == "cell_size_unavailable":
+            return None, "sharp preview: re-attach herdr once (close and reopen its window)"
+        return None, ""
 
     def frame(self, state, sw, sh, cols, rows, top):
         c, r = _fit(sw, sh, cols, rows, self.cell_w, self.cell_h)
@@ -205,11 +212,11 @@ class BlockRenderer:
 
 
 def pick_renderer():
-    herdr = HerdrRenderer.probe()
+    herdr, why = HerdrRenderer.probe()
     if herdr:
         return herdr, ""
     if os.environ.get("HERDR_ENV") == "1":
-        return BlockRenderer(), "sharp preview: set experimental.kitty_graphics = true in herdr"
+        return BlockRenderer(), why
     if os.environ.get("TERM_PROGRAM", "").lower() in ("ghostty", "kitty", "wezterm") \
             or os.environ.get("KITTY_WINDOW_ID"):
         return KittyRenderer(), ""
@@ -224,6 +231,7 @@ class Viewer:
         self.label = self.desk.cfg["label"] or "Agent"
         self.activity_path = settings.runtime_dir() / "activity.json"
         self.renderer, self.hint = pick_renderer()
+        self.last_probe = time.time()
         self.last_hash = None
         self.last_status = None
         self.dirty = True
@@ -250,7 +258,19 @@ class Viewer:
         where = "on screen" if self.desk.visible(state) else "in the background"
         return f"○ {self.label} idle {where}" + (f" · last: {action} {_ago(age)}" if action else "")
 
+    def upgrade(self):
+        """Switch to sharp Herdr graphics as soon as they become available."""
+        if self.renderer.name != "blocks" or not self.hint or time.time() - self.last_probe < 5:
+            return
+        self.last_probe = time.time()
+        herdr, why = HerdrRenderer.probe()
+        if herdr:
+            self.renderer, self.hint, self.dirty = herdr, "", True
+        elif why != self.hint:
+            self.hint, self.last_status = why, None
+
     def draw(self):
+        self.upgrade()
         cols, rows = shutil.get_terminal_size()
         state = self.desk.state()
         status = self.status_line(state)[:cols]
