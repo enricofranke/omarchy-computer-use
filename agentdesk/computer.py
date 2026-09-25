@@ -55,14 +55,20 @@ class Computer:
         self._pointer = None
         self._pointer_key = None
         self._last_render_check = 0.0
+        # True once this process started the desktop on demand.
+        self.autostarted = False
 
     # --- plumbing ----------------------------------------------------------
 
     def state(self, autostart=True):
         state = self.desk.state()
         if not state and autostart:
-            state = self.desk.start()
-            self.open_preview()
+            # With a live preview docked next to the chat, the big window
+            # would only get in the user's way; show it only without one.
+            state = self.desk.start(show=False)
+            self.autostarted = True
+            if not self.open_preview() and not self.cfg["start_hidden"]:
+                self.desk.show()
         if not state:
             raise DeskError("the agent desktop is not running")
         return self.desk.require()

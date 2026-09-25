@@ -80,7 +80,8 @@ def main():
     p = sub.add_parser("status", help="print whether the sandbox runs")
     p.add_argument("--json", action="store_true")
     sub.add_parser("mcp", help="run the MCP server on stdio")
-    sub.add_parser("watch", help="live preview of the desktop in this terminal (Kitty graphics)")
+    p = sub.add_parser("watch", help="live preview of the desktop in this terminal")
+    p.add_argument("--auto", action="store_true", help="close when the desktop stops")
     sub.add_parser("preview", help="open the live preview in a Herdr split next to this pane")
     sub.add_parser("doctor", help="check dependencies")
 
@@ -126,7 +127,7 @@ def main():
         return 0
     if args.cmd == "watch":
         from agentdesk.watch import main as watch
-        watch()
+        watch(auto=args.auto)
         return 0
     if args.cmd == "preview":
         from agentdesk import herdr

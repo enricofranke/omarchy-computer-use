@@ -6,12 +6,15 @@ Stdlib only. stdout carries protocol messages exclusively; logs go to stderr.
 import base64
 import json
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
 
 from . import __version__
+from . import config as settings
 from .computer import Computer
 from .desk import DeskError
 from .hypr import HyprError
@@ -46,6 +49,9 @@ When a step needs the human (logging in, entering a password or payment data,
 solving a CAPTCHA), call `desktop` with action `handover` and a short message.
 The user takes over with their own mouse and keyboard; your input is blocked
 until control comes back. Only use `reclaim` when the user said they are done.
+
+When the task no longer needs the desktop, call `desktop` with action `stop`;
+the live preview closes with it. Browser logins survive in the sandbox profile.
 """
 
 COORD = {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2}
@@ -163,6 +169,42 @@ def _xy(args, key="coordinate"):
 class Server:
     def __init__(self):
         self.computer = Computer()
+        self.lock = threading.Lock()
+
+    def idle_watch(self):
+        """Stop the desktop once the agent has left it alone for a while."""
+        minutes = self.computer.cfg["idle_stop_minutes"]
+        if minutes <= 0:
+            return
+        while True:
+            time.sleep(30)
+            desk = self.computer.desk
+            with self.lock:
+                try:
+                    state = desk.state()
+                    if not state or desk.controller() != "agent":
+                        continue
+                    try:
+                        last = json.loads((settings.runtime_dir() / "activity.json").read_text())["at"]
+                    except (OSError, ValueError, KeyError):
+                        last = state["started"]
+                    if time.time() - max(last, state["started"]) > minutes * 60:
+                        print("agentdesk: stopping the idle desktop", file=sys.stderr)
+                        self.computer.close()
+                        desk.stop()
+                except Exception:  # never let the watchdog kill the server
+                    traceback.print_exc(file=sys.stderr)
+
+    def shutdown(self):
+        """Session over: stop a desktop this session started, unless the user has it."""
+        computer = self.computer
+        computer.close()
+        try:
+            if computer.cfg["stop_on_exit"] and computer.autostarted and computer.desk.state() \
+                    and computer.desk.controller() == "agent":
+                computer.desk.stop()
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
 
     def settle_and_shoot(self, note):
         time.sleep(self.computer.cfg["settle_ms"] / 1000)
@@ -335,6 +377,8 @@ class Server:
 
 def serve():
     server = Server()
+    threading.Thread(target=server.idle_watch, daemon=True).start()
+    signal.signal(signal.SIGTERM, lambda *_: (server.shutdown(), sys.exit(0)))
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -347,9 +391,10 @@ def serve():
             continue  # notifications need no reply
         reply = {"jsonrpc": "2.0", "id": message["id"]}
         try:
-            reply["result"] = server.handle(message)
+            with server.lock:
+                reply["result"] = server.handle(message)
         except KeyError:
             reply["error"] = {"code": -32601, "message": f"Method not found: {message.get('method')}"}
         sys.stdout.write(json.dumps(reply) + "\n")
         sys.stdout.flush()
-    server.computer.close()
+    server.shutdown()

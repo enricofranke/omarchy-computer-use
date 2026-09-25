@@ -322,9 +322,7 @@ class Desk:
             ("inactive_border_color", frame),
             ("no_dim", 1),
             ("opaque", 1),
-            # While the agent drives, clicking the window must not pull the
-            # user's keyboard focus away from what they are doing.
-            ("no_focus", 1 if agent else 0),
+            ("no_focus", 0),
         ]
         for prop, value in props:
             try:

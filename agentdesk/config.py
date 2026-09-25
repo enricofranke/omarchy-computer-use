@@ -25,6 +25,11 @@ DEFAULTS = {
     "settle_ms": 400,
     # Dock a live preview next to the agent's chat when it runs inside Herdr.
     "preview": True,
+    # Stop the desktop after this many minutes without agent activity while
+    # the agent has control (0 keeps it running).
+    "idle_stop_minutes": 15,
+    # Stop a desktop the agent started itself when its session ends.
+    "stop_on_exit": True,
 }
 
 

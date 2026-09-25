@@ -17,6 +17,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import select
 import shutil
 import signal
@@ -33,7 +34,9 @@ from .desk import Desk, DeskError
 from .hypr import HyprError
 
 ESC = "\x1b"
-KEYS = "s show/hide · t take over · q quit"
+MOUSE_ON = f"{ESC}[?1000h{ESC}[?1006h"
+MOUSE_OFF = f"{ESC}[?1000l{ESC}[?1006l"
+SGR_MOUSE = re.compile(r"\x1b\[<(\d+);(\d+);(\d+)([Mm])")
 
 
 def _winsize():
@@ -226,7 +229,13 @@ def pick_renderer():
 # --- viewer --------------------------------------------------------------------
 
 class Viewer:
-    def __init__(self):
+    def __init__(self, auto=False):
+        # auto: opened by the agent; close once the desktop has gone away.
+        self.auto = auto
+        self.seen_running = False
+        self.gone_since = None
+        self.confirm_stop_until = 0.0
+        self.buttons = []
         self.desk = Desk()
         self.label = self.desk.cfg["label"] or "Agent"
         self.activity_path = settings.runtime_dir() / "activity.json"
@@ -269,12 +278,40 @@ class Viewer:
         elif why != self.hint:
             self.hint, self.last_status = why, None
 
+    def footer(self, state, cols):
+        """Clickable buttons; also remembers their columns for mouse hits."""
+        if not state:
+            items = [("Close", "q")]
+        else:
+            stop = "Stop? click again" if time.time() < self.confirm_stop_until else "Stop"
+            items = [
+                ("Hand back" if self.desk.controller() == "user" else "Take over", "t"),
+                ("Hide" if self.desk.visible(state) else "Show", "s"),
+                (stop, "x"),
+                ("Close", "q"),
+            ]
+        text, self.buttons, col = "", [], 1
+        for label, key in items:
+            chunk = f" {label} [{key}] "
+            if col + len(chunk) > cols:
+                break
+            self.buttons.append((col, col + len(chunk) - 1, key))
+            text += f"{ESC}[7m{chunk}{ESC}[0m "
+            col += len(chunk) + 1
+        if self.hint and col + len(self.hint) + 2 <= cols:
+            text += f"{ESC}[2m {self.hint}{ESC}[0m"
+        return text
+
     def draw(self):
         self.upgrade()
         cols, rows = shutil.get_terminal_size()
         state = self.desk.state()
+        if state:
+            self.seen_running, self.gone_since = True, None
+        elif self.gone_since is None:
+            self.gone_since = time.time()
         status = self.status_line(state)[:cols]
-        footer = (self.hint or KEYS)[:cols]
+        footer = self.footer(state, cols)
 
         frame, render = None, None
         if state:
@@ -284,7 +321,7 @@ class Viewer:
             except (subprocess.SubprocessError, DeskError, HyprError, OSError, ValueError):
                 frame = None
         digest = hashlib.sha1(frame).hexdigest() if frame else None
-        if not self.dirty and digest == self.last_hash and status == self.last_status:
+        if not self.dirty and digest == self.last_hash and (status, footer) == self.last_status:
             return
 
         out = [f"{ESC}[1;1H{ESC}[2K{ESC}[1m{status}{ESC}[0m"]
@@ -292,13 +329,47 @@ class Viewer:
             out.append(render() or "")
         elif not frame:
             out.append(self.renderer.clear() + f"{ESC}[2;1H{ESC}[J")
-        out.append(f"{ESC}[{rows};1H{ESC}[2K{ESC}[2m{footer}{ESC}[0m")
+        out.append(f"{ESC}[{rows};1H{ESC}[2K{footer}")
         self.write("".join(out))
-        self.last_hash, self.last_status, self.dirty = digest, status, False
+        self.last_hash, self.last_status, self.dirty = digest, (status, footer), False
+
+    def should_close(self):
+        if not self.auto or self.gone_since is None:
+            return False
+        # Give a restart a moment; close quickly once a running desktop stopped.
+        grace = 3 if self.seen_running else 20
+        return time.time() - self.gone_since > grace
+
+    def handle_input(self, data):
+        """Keys and SGR mouse clicks (on the button row or the picture)."""
+        for match in SGR_MOUSE.finditer(data):
+            button, col, row, kind = int(match[1]), int(match[2]), int(match[3]), match[4]
+            if kind != "M" or button != 0:
+                continue
+            _, rows = shutil.get_terminal_size()
+            if row == rows:
+                for start, end, key in self.buttons:
+                    if start <= col <= end:
+                        if self.handle_key(key):
+                            return True
+            elif row > 1:
+                self.handle_key("s")
+        for key in SGR_MOUSE.sub("", data).lower():
+            if self.handle_key(key):
+                return True
+        return False
 
     def handle_key(self, key):
+        """Returns True when the viewer should exit."""
+        if key in ("q", "\x03"):
+            return True
         try:
-            if key == "s" and self.desk.state():
+            if key == "x" and self.desk.state():
+                if time.time() < self.confirm_stop_until:
+                    self.desk.stop()
+                else:
+                    self.confirm_stop_until = time.time() + 3
+            elif key == "s" and self.desk.state():
                 self.desk.toggle()
             elif key == "t":
                 if self.desk.controller() == "agent":
@@ -309,31 +380,32 @@ class Viewer:
         except (DeskError, HyprError):
             pass
         self.last_status = None
+        return False
 
     def run(self):
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         signal.signal(signal.SIGWINCH, lambda *_: setattr(self, "dirty", True))
-        self.write(f"{ESC}]2;agentdesk preview\a{ESC}[?25l{ESC}[2J")
+        self.write(f"{ESC}]2;agentdesk preview\a{ESC}[?25l{ESC}[2J{MOUSE_ON}")
         try:
             tty.setcbreak(fd)
-            while True:
+            while not self.should_close():
                 if self.dirty:
                     self.write(self.renderer.clear() + f"{ESC}[2J")
                 self.draw()
                 _, age = self.activity()
-                ready, _, _ = select.select([fd], [], [], 0.3 if age < 6 else 0.8)
-                if ready:
-                    key = os.read(fd, 1).decode(errors="ignore").lower()
-                    if key in ("q", "\x03"):
-                        break
-                    self.handle_key(key)
+                sharp = self.renderer.name != "blocks"
+                # Near-video while the agent acts, relaxed when idle.
+                timeout = (0.08 if sharp else 0.3) if age < 6 else (0.5 if sharp else 0.8)
+                ready, _, _ = select.select([fd], [], [], timeout)
+                if ready and self.handle_input(os.read(fd, 256).decode(errors="ignore")):
+                    break
         except KeyboardInterrupt:
             pass
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
-            self.write(self.renderer.clear() + f"{ESC}[2J{ESC}[H{ESC}[?25h")
+            self.write(MOUSE_OFF + self.renderer.clear() + f"{ESC}[2J{ESC}[H{ESC}[?25h")
 
 
-def main():
-    Viewer().run()
+def main(auto=False):
+    Viewer(auto=auto).run()

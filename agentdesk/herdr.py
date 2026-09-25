@@ -49,7 +49,7 @@ def open_preview():
             "pane", "split", "--pane", caller, "--direction", direction,
             "--ratio", "0.62", "--no-focus", "--cwd", str(Path.home()),
         )["pane"]
-        command = f"exec {shlex.quote(sys.executable)} -B {shlex.quote(str(BIN))} watch"
+        command = f"exec {shlex.quote(sys.executable)} -B {shlex.quote(str(BIN))} watch --auto"
         _herdr("pane", "run", pane["pane_id"], command)
     except (RuntimeError, ValueError, KeyError, StopIteration, subprocess.SubprocessError) as exc:
         print(f"agentdesk: could not open the Herdr preview: {exc}", file=sys.stderr)
