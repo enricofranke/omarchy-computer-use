@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.enricofranke.omarchy-computer-use",
   "name": "Computer Use",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "Enrico Franke",
   "homepage": "https://github.com/enricofranke/omarchy-computer-use",
   "description": "Claude computer use for Omarchy: click to show or hide the agent's sandbox desktop, right-click to take over, middle-click to stop it",

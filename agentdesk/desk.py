@@ -55,7 +55,14 @@ local agent_has_control = io.open(${lock_file}, "r")
 if agent_has_control then agent_has_control:close() end
 hl.device({ name = "wl_pointer", enabled = agent_has_control == nil })
 hl.device({ name = "wl_keyboard", enabled = agent_has_control == nil })
-${startup}""")
+${close_bind}${startup}""")
+
+# Windows inside have no decorations, browser popups draw no close button, and
+# the user's own shortcuts are caught by their session. So while they have
+# taken over, this key closes the focused window inside.
+CLOSE_BIND = Template("""
+hl.bind(${key}, hl.dsp.window.close(), { description = "Close window" })
+""")
 
 # A desktop rather than a tiling session: windows float and open centred.
 FLOAT_RULE = """hl.window_rule({ match = { class = ".*" }, float = true, center = true })
@@ -196,6 +203,7 @@ class Desk:
             gaps_out=self.cfg["gaps_out"],
             rounding=self.cfg["rounding"],
             float_rule=FLOAT_RULE if self.cfg["float_windows"] else "",
+            close_bind=CLOSE_BIND.substitute(key=json.dumps(self.cfg["close_key"])) if self.cfg["close_key"] else "",
             kb_layout=json.dumps(self.cfg["kb_layout"]) if self.cfg["kb_layout"]
             else self._host_option("input:kb_layout", "us"),
             kb_variant=json.dumps(self.cfg["kb_variant"]) if self.cfg["kb_layout"] or self.cfg["kb_variant"]

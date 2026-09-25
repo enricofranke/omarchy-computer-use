@@ -39,6 +39,8 @@ OPTIONS = [
     Option("gaps_out", 8, "Gap between windows and the sandbox edge", restart=True, minimum=0, maximum=100),
     Option("float_windows", True, "Windows float and open centred like on a desktop. false tiles them",
            restart=True),
+    Option("close_key", "ALT + F4", "Closes the focused window inside while you have taken over. Empty turns it off",
+           restart=True),
     Option("kb_layout", "", "Keyboard layout inside the sandbox, e.g. de. Empty copies yours", restart=True),
     Option("kb_variant", "", "Keyboard layout variant inside the sandbox. Empty copies yours", restart=True),
     # Behaviour
@@ -153,6 +155,8 @@ def check(key, raw):
         raise ValueError(f"{key} must be at most {option.maximum:g}, got {value!r}")
     if key in COLOURS:
         value = normalize_colour(key, value)
+    if key == "close_key" and not re.fullmatch(r"[\w +]*", value):
+        raise ValueError(f"close_key must look like ALT + F4, got {value!r}")
     if key == "workspace" and not re.fullmatch(r"[\w.-]+", value):
         raise ValueError(f"workspace must be a plain name, got {value!r}")
     return value

@@ -47,8 +47,10 @@ def _keysym(name):
 
 
 class Computer:
-    def __init__(self, desk=None):
+    def __init__(self, desk=None, agent=True):
         self.desk = desk or Desk()
+        # A takeover only blocks the agent. The command line is the user's.
+        self.agent = agent
         self.cfg = self.desk.cfg
         self._pointer = None
         self._pointer_key = None
@@ -97,7 +99,7 @@ class Computer:
         self._pointer_key = None
 
     def require_control(self):
-        if self.desk.controller() == "user":
+        if self.agent and self.desk.controller() == "user":
             raise DeskError(
                 "the user has taken over the desktop. Wait, or ask them to hand control "
                 "back (bar icon right-click, 't' in the preview, or `agentdesk release`)."

@@ -101,7 +101,14 @@ o.bind("SUPER + CTRL + A", "Agent desktop",
 
 While the agent has control, the sandbox ignores your forwarded mouse and
 keyboard and its window does not take your keyboard focus. After a takeover
-the agent's input is blocked until you hand back.
+the agent's input is blocked until you hand back; the command line keeps
+working for you.
+
+Windows inside the sandbox have no title bar, and browser popups (such as a
+login window) draw no close button. While you have control, **Alt+F4** closes
+the focused window inside. Your own shortcuts like Super+W act on your
+desktop and would close the whole sandbox window. `agentdesk windows close`
+works too.
 
 ## Live preview
 
@@ -179,6 +186,7 @@ as JSON. Environment variables win over the file.
 | `gaps_in` | `4` | Gap between windows inside the sandbox ¹ |
 | `gaps_out` | `8` | Gap between windows and the sandbox edge ¹ |
 | `float_windows` | `true` | Windows float and open centred like on a desktop. false tiles them ¹ |
+| `close_key` | `ALT + F4` | Closes the focused window inside while you have taken over. Empty turns it off ¹ |
 | `kb_layout` | `""` | Keyboard layout inside the sandbox, e.g. de. Empty copies yours ¹ |
 | `kb_variant` | `""` | Keyboard layout variant inside the sandbox. Empty copies yours ¹ |
 | `start_hidden` | `false` | Park the window off-screen when the desktop starts |
@@ -278,6 +286,8 @@ limits, take away the agent's shell access too.
 - **Screenshots time out.** The window is somewhere the host stopped drawing,
   such as a closed special workspace. The desktop parks itself automatically and
   retries; `agentdesk hide` does the same by hand.
+- **A popup cannot be closed.** Take over, click into it and press Alt+F4 (or Ctrl+W in a
+  browser), or run `agentdesk windows list` and `agentdesk windows close <id>`.
 - **The window was closed.** The nested session ends with it. The next action
   or `agentdesk start` brings up a fresh one.
 - **Logs.** `$XDG_RUNTIME_DIR/agentdesk/hyprland.log`

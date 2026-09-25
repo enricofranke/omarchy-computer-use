@@ -180,7 +180,7 @@ def main():
             cursor.preview(cfg["accent"], cfg["label"], args.output)
             print(args.output)
         else:
-            computer = Computer(desk)
+            computer = Computer(desk, agent=False)
             if args.cmd == "open":
                 print(computer.launch(args.target) if args.is_command else computer.open_url(args.target))
             elif args.cmd == "screenshot":
