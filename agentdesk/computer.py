@@ -344,6 +344,11 @@ class Computer:
                 # counts as a crash; skip the restore prompt next time.
                 "--hide-crash-restore-bubble",
             ]
+            if self.desk._isolated_bus() and not self.cfg["browser_keyring"]:
+                # The sandbox's own D-Bus starts a locked keyring. Chromium
+                # waits for it to be unlocked before it loads any page, and
+                # the password prompt hides behind the browser.
+                extra.append("--password-store=basic")
             return " ".join(shlex.quote(a) for a in argv[:1] + extra + argv[1:])
         if name == "firefox" and "--profile" not in argv and "-profile" not in argv:
             (profiles / "firefox").mkdir(parents=True, exist_ok=True)

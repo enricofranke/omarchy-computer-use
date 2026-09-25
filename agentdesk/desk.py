@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from string import Template
 
+from . import clipboard
 from . import config as settings
 from . import cursor
 from .hypr import Hypr, HyprError, instances, lua_table, require_host
@@ -235,6 +236,7 @@ class Desk:
         return state
 
     def stop(self):
+        clipboard.stop()
         if not self.state_path.exists():
             return False
         try:
@@ -319,9 +321,12 @@ class Desk:
         if not self.visible(state):
             self.show()
         self.host.dispatch("hl.dsp.focus(" + lua_table({"window": self._window(state)}) + ")")
+        if self.cfg["share_clipboard"]:
+            clipboard.share(os.environ.get("WAYLAND_DISPLAY"), state["socket"])
 
     def give_to_agent(self):
         state = self.require()
+        clipboard.stop(state["socket"])
         self.lock_path.touch()
         self._apply_control(state)
 

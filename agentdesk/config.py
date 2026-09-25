@@ -48,6 +48,8 @@ OPTIONS = [
     Option("workspace", "agentdesk", "Hidden workspace the window is parked on", restart=True),
     Option("browser", "", "Browser for `open` with a URL (Chromium family or Firefox). Empty picks one"),
     Option("browser_args", [], "Extra arguments for the sandbox browser"),
+    Option("browser_keyring", False, "Let the sandbox browser use your keyring. With isolate_dbus it then asks for "
+           "your password at every start and loads nothing until you answer"),
     Option("isolate_dbus", True, "Give sandbox apps their own D-Bus session so they open inside the sandbox",
            restart=True),
     Option("screenshot_cursor", False, "Draw the agent cursor into screenshots sent to the agent"),
@@ -59,6 +61,8 @@ OPTIONS = [
     Option("terminal_classes", ["foot", "alacritty", "kitty", "ghostty", "wezterm", "xterm", "konsole",
                                 "terminal"],
            "Window classes (substrings) that paste with ctrl+shift+v instead of ctrl+v"),
+    Option("share_clipboard", True, "Share the clipboard with the sandbox while you have taken over. The "
+           "sandbox clipboard is emptied when the agent gets control back"),
     Option("notify_handover", True, "Send a desktop notification when the agent hands control to you"),
     Option("idle_stop_minutes", 15, "Stop the desktop after this many idle minutes while the agent has "
            "control. 0 keeps it running", minimum=0),

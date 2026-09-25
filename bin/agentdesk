@@ -44,6 +44,7 @@ def cmd_doctor(args, desk):
         ("hyprctl", "talks to Hyprland"),
         ("grim", "screenshots"),
         ("wtype", "keyboard input"),
+        ("wl-copy", "reliable typing and clipboard sharing (optional)"),
         ("rsvg-convert", "custom cursor colours/labels (optional)"),
         ("dbus-run-session", "isolates sandbox apps from your session bus (optional)"),
     ]:
@@ -122,9 +123,17 @@ def main():
     p = sub.add_parser("cursor-preview", help="render the agent cursor to a PNG")
     p.add_argument("-o", "--output", default="agentdesk-cursor.png")
     admin.add_parsers(sub)
+    p = sub.add_parser("clip-push")  # internal: one step of clipboard sharing
+    p.add_argument("src")
+    p.add_argument("dst")
 
     args = parser.parse_args()
 
+    if args.cmd == "clip-push":
+        from agentdesk import clipboard
+        sys.stdin.buffer.read()  # wl-paste hands over the content; push() fetches the best type itself
+        clipboard.push(args.src, args.dst)
+        return 0
     if args.cmd in ("config", "role", "agents"):
         return admin.run(args)
     if args.cmd == "mcp":

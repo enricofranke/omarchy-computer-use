@@ -47,7 +47,7 @@ working) while it sits on the hidden `agentdesk` workspace.
 ## Requirements
 
 - Hyprland 0.56 or newer with a Lua config. Omarchy 4 ships this.
-- `python3` (3.9+), `grim`, `wtype`
+- `python3` (3.9+), `grim`, `wtype`, `wl-clipboard` (typing and clipboard sharing)
 - Optional: `rsvg-convert` to recolour or rename the cursor, and `dbus-run-session`
   to isolate sandbox apps from your session bus
 
@@ -103,6 +103,12 @@ While the agent has control, the sandbox ignores your forwarded mouse and
 keyboard and its window does not take your keyboard focus. After a takeover
 the agent's input is blocked until you hand back; the command line keeps
 working for you.
+
+The sandbox has a clipboard of its own. While you have control it is shared
+with yours in both directions, so you can paste a password from your password
+manager into a login form inside. When you hand back, sharing stops and the
+sandbox clipboard is emptied; while the agent drives it never sees what you
+copy.
 
 Windows inside the sandbox have no title bar, and browser popups (such as a
 login window) draw no close button. While you have control, **Alt+F4** closes
@@ -193,12 +199,14 @@ as JSON. Environment variables win over the file.
 | `workspace` | `agentdesk` | Hidden workspace the window is parked on ¹ |
 | `browser` | `""` | Browser for `open` with a URL (Chromium family or Firefox). Empty picks one |
 | `browser_args` | `[]` | Extra arguments for the sandbox browser |
+| `browser_keyring` | `false` | Let the sandbox browser use your keyring. With isolate_dbus it then asks for your password at every start and loads nothing until you answer |
 | `isolate_dbus` | `true` | Give sandbox apps their own D-Bus session so they open inside the sandbox ¹ |
 | `screenshot_cursor` | `false` | Draw the agent cursor into screenshots sent to the agent |
 | `settle_ms` | `400` | Pause after an action before the follow-up screenshot, in ms |
 | `open_wait_ms` | `2000` | Pause after `open` before the screenshot, in ms |
 | `cursor_glide_ms` | `450` | Longest glide of the agent cursor to its target, in ms. 0 jumps |
 | `terminal_classes` | `[…]` | Window classes (substrings) that paste with ctrl+shift+v instead of ctrl+v |
+| `share_clipboard` | `true` | Share the clipboard with the sandbox while you have taken over. The sandbox clipboard is emptied when the agent gets control back |
 | `notify_handover` | `true` | Send a desktop notification when the agent hands control to you |
 | `idle_stop_minutes` | `15` | Stop the desktop after this many idle minutes while the agent has control. 0 keeps it running |
 | `stop_on_exit` | `true` | Stop a desktop the agent started itself when its session ends |
