@@ -83,6 +83,21 @@ def _descends_from(pid, ancestor):
     return False
 
 
+def _kill_group(pgid, timeout=3):
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.1)
+
+
 def _lighten(hex_colour, amount=0.4):
     value = hex_colour.lstrip("#")
     rgb = [int(value[i : i + 2], 16) for i in (0, 2, 4)]
@@ -160,9 +175,7 @@ class Desk:
 
         self._host_rule(enabled=True)
         try:
-            proc = self._spawn(config_path, icons, runtime / "hyprland.log")
-            instance = self._wait_for_instance(proc, runtime / "hyprland.log")
-            window = self._wait_for_window(instance["pid"])
+            proc, instance, window = self._launch(config_path, icons, runtime / "hyprland.log")
         finally:
             self._host_rule(enabled=False)
 
@@ -195,17 +208,11 @@ class Desk:
             Hypr(state["instance"]).dispatch("hl.dsp.exit()")
         except (HyprError, KeyError):
             pass
-        for sig in (None, signal.SIGTERM, signal.SIGKILL):
-            if sig and pgid:
-                try:
-                    os.killpg(pgid, sig)
-                except ProcessLookupError:
-                    pass
-            deadline = time.time() + 3
-            while time.time() < deadline and _pid_alive(pid):
-                time.sleep(0.1)
-            if not _pid_alive(pid):
-                break
+        deadline = time.time() + 3
+        while time.time() < deadline and _pid_alive(pid):
+            time.sleep(0.1)
+        if pgid:
+            _kill_group(pgid)
         return True
 
     # --- host window -------------------------------------------------------
@@ -324,6 +331,24 @@ class Desk:
                 stderr=subprocess.STDOUT, start_new_session=True,
             )
 
+    def _launch(self, config_path, icons, log_path, attempts=4):
+        # The nested compositor sometimes cannot allocate GPU buffers right
+        # after a previous one exited (seen on NVIDIA). Its window then never
+        # maps, so give up on that attempt early and try again.
+        error = None
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(0.5 * attempt)
+            proc = self._spawn(config_path, icons, log_path)
+            try:
+                instance = self._wait_for_instance(proc, log_path)
+                window = self._wait_for_window(instance)
+                return proc, instance, window
+            except DeskError as exc:
+                error = exc
+                _kill_group(proc.pid)
+        raise error
+
     def _wait_for_instance(self, proc, log_path, timeout=15):
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -334,14 +359,19 @@ class Desk:
                 break
             time.sleep(0.2)
         tail = log_path.read_text()[-800:] if log_path.exists() else ""
-        proc.kill()
         raise DeskError(f"the agent desktop did not start. Log tail:\n{tail}")
 
-    def _wait_for_window(self, pid, timeout=10):
+    def _wait_for_window(self, instance, timeout=4):
+        log = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "hypr" / instance["instance"] / "hyprland.log"
         deadline = time.time() + timeout
         while time.time() < deadline:
             for client in self.host.clients():
-                if client.get("pid") == pid:
+                if client.get("pid") == instance["pid"]:
                     return client
+            try:
+                if "Swapchain: Failed acquiring a buffer" in log.read_text(errors="replace"):
+                    raise DeskError("the agent desktop could not allocate GPU buffers")
+            except OSError:
+                pass
             time.sleep(0.2)
         raise DeskError("the agent desktop window never appeared on the host")
