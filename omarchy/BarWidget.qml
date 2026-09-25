@@ -11,7 +11,7 @@ import qs.Ui
 // blue while you have taken over.
 BarWidget {
   id: root
-  moduleName: "agentdesk"
+  moduleName: "io.github.enricofranke.omarchy-computer-use"
 
   readonly property string bin: decodeURIComponent(
     Qt.resolvedUrl("../bin/agentdesk").toString().replace(/^file:\/\//, ""))

@@ -1,15 +1,16 @@
 {
   "schemaVersion": 1,
-  "id": "agentdesk",
-  "name": "AgentDesk",
+  "id": "io.github.enricofranke.omarchy-computer-use",
+  "name": "Computer Use",
   "version": "0.1.0",
-  "author": "agentdesk contributors",
-  "description": "Shows the AI agent's sandbox desktop: click to show or hide it, right-click to stop it",
+  "author": "Enrico Franke",
+  "homepage": "https://github.com/enricofranke/omarchy-computer-use",
+  "description": "Claude computer use for Omarchy: click to show or hide the agent's sandbox desktop, right-click to take over, middle-click to stop it",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "omarchy/BarWidget.qml" },
   "barWidget": {
-    "displayName": "AgentDesk",
-    "description": "Show, hide or stop the AI agent's sandbox desktop",
+    "displayName": "Computer Use",
+    "description": "Show or hide the AI agent's sandbox desktop, take over or stop it",
     "category": "Info",
     "allowMultiple": false,
     "defaultSection": "right"

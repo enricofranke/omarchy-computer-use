@@ -1,12 +1,13 @@
 {
-  "name": "agentdesk",
+  "name": "omarchy-computer-use",
   "description": "Computer use for Hyprland and Omarchy with a separate agent cursor",
   "owner": {
-    "name": "agentdesk contributors"
+    "name": "Enrico Franke",
+    "url": "https://github.com/enricofranke"
   },
   "plugins": [
     {
-      "name": "agentdesk",
+      "name": "omarchy-computer-use",
       "source": "./",
       "description": "Claude gets its own sandbox desktop with its own cursor on Hyprland/Omarchy"
     }

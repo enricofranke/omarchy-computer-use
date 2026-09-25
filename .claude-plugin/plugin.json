@@ -1,13 +1,16 @@
 {
-  "name": "agentdesk",
-  "displayName": "AgentDesk",
+  "name": "omarchy-computer-use",
+  "displayName": "Omarchy Computer Use",
   "version": "0.1.0",
-  "description": "Computer use on Hyprland/Omarchy: Claude gets its own sandbox desktop with its own cursor, so your mouse and keyboard stay yours.",
+  "description": "Computer use on Omarchy/Hyprland: Claude gets its own sandbox desktop with its own cursor, so your mouse and keyboard stay yours.",
   "author": {
-    "name": "agentdesk contributors"
+    "name": "Enrico Franke",
+    "url": "https://github.com/enricofranke"
   },
+  "homepage": "https://github.com/enricofranke/omarchy-computer-use",
+  "repository": "https://github.com/enricofranke/omarchy-computer-use",
   "license": "MIT",
-  "keywords": ["computer-use", "hyprland", "omarchy", "wayland", "desktop", "automation"],
+  "keywords": ["computer-use", "omarchy", "hyprland", "wayland", "desktop", "automation", "claude"],
   "mcpServers": {
     "agentdesk": {
       "command": "python3",
