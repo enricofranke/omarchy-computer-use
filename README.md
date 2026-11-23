@@ -14,6 +14,9 @@ tag), its own keyboard focus and its own windows. Your mouse and keyboard are
 never touched, so you keep working while it clicks around. Hide the window and
 the agent keeps working in the background.
 
+**Looking for contributors** who want to keep this project going with me, see
+[Contributing](#contributing).
+
 ## Highlights
 
 - **Your input stays yours.** The agent drives a separate Wayland seat with its own cursor,
@@ -346,7 +349,18 @@ limits, take away the agent's shell access too.
   browser), or run `agentdesk windows list` and `agentdesk windows close <id>`.
 - **The window was closed.** The nested session ends with it. The next action
   or `agentdesk start` brings up a fresh one.
+- **The host's document portal stopped (exit status 21).** Up to 0.2.4, an app in the
+  sandbox could start a second `xdg-document-portal` that took over the host's mount.
+  Since 0.2.5 the sandbox's portal mounts in a folder of its own. After updating, bring
+  the host's portal back once with `systemctl --user restart xdg-document-portal`.
 - **Logs.** `$XDG_RUNTIME_DIR/agentdesk/hyprland.log`
+
+## Contributing
+
+I'm looking for contributors who want to keep this project alive with me: people who
+use Omarchy or Hyprland every day, try new releases, fix bugs, review pull requests or
+help with new features. If that sounds like you, open an issue or a pull request, or
+just say hello in an issue. Good bug reports with steps to reproduce help a lot too.
 
 ## License
 
